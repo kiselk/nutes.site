@@ -1,0 +1,563 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title></title>
+
+
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script>window.jQuery || document.write(decodeURIComponent('%3Cscript src="js/jquery.min.js"%3E%3C/script%3E'))</script>
+<link rel="stylesheet" type="text/css" href="https://cdn3.devexpress.com/jslib/20.1.6/css/dx.common.css"/>
+<link rel="stylesheet" type="text/css" href="https://cdn3.devexpress.com/jslib/20.1.6/css/dx.light.compact.css"/>
+<script src="https://cdn3.devexpress.com/jslib/20.1.6/js/dx.all.js"></script>
+<script src="js/nutrients.js">
+</script>
+<script src="js/stages.js">
+</script>
+<style>.textarea textarea { font-size: 50px; }</style>
+<script>
+    var box = [];
+
+    var litresInGallon = 3.78541;
+
+    var source = {};
+    var stages_dataSource;
+    var selectedStages = [];
+
+    function buyBox() {
+
+        box = [];
+
+        box.push(new ArmorSi(1000));
+        box.push(new Calimagic(1000));
+        box.push(new FloraGrow(1000));
+        box.push(new FloraMicro(1000));
+        box.push(new FloraBloom(1000));
+        box.push(new DiamondNectar(1000));
+        box.push(new FloraliciousPlus(1000));
+        box.push(new FloraBlend(1000));
+        box.push(new RapidStart(1000));
+        box.push(new CalciumMagnesium(1000));
+        box.push(new KoolBloom(1000));
+        box.push(new FloraNectar(1000));
+        box.push(new PhUp(1000));
+        box.push(new PhDown(1000));
+    }
+
+
+    function showBox() {
+        var buttons = "<table border=0>";
+
+        buttons += '<tr><td align="center"><img src="img/bottle.png" height="35"></td><td><div id="bucket_amount"></div></td></tr>';
+
+        buttons += '<tr><td align="center"><img src="img/bottle.png" height="35"></td><td><div id="mid_bucket_amount"></div></td></tr>';
+
+        box.forEach(function(product) {
+            buttons += '<tr><td align="center"><img src="img/' + product.code + '.png" height="35"</td><td><div id="' + product.code + '_amount"></div></td></tr>';
+        });
+        buttons += "</table>";
+        $("#box")[0].innerHTML = buttons;
+
+
+
+
+        $("#ignoreCalimagic").dxCheckBox({
+            text: "Ignore CALiMAGic",
+            onValueChanged: function(e) {
+                refreshData();
+            }
+        });
+
+        var ppms = ['Min', 'Mid', 'Max'];
+
+        $("#targetPPM").dxRadioGroup({
+            items: ppms,
+            value: ppms[0],
+            layout: "horizontal",
+            onValueChanged: function(e){
+                refreshData();
+            }
+        });
+
+
+        $('#bucket_amount').dxNumberBox({
+            value: 5.0,
+            width: 130,
+            min: 0.1,
+          //  format: "0.00",
+            //  max: "9999.99",
+            showSpinButtons: true,
+            onValueChanged: function(e) {
+                refreshData();
+            }
+        });
+
+
+        $('#mid_bucket_amount').dxNumberBox({
+            value: 5.0,
+            width: 130,
+            min: 0.1,
+           // format: "0.00",
+          //  max: "9999.99",
+            showSpinButtons: true,
+            onValueChanged: function(e) {
+                //if (!needsRefresh)
+                    refreshData();
+            }
+        });
+        box.forEach(function(product) {
+            $('#' + product.code + '_amount').dxNumberBox({
+                value: 0.0,
+                width: 130,
+                min: 0,
+                //format: "0.00",
+                //max: "9999.99",
+                showSpinButtons: true,
+                onValueChanged: function(e) {
+                        refreshData();
+                }
+            });
+
+        });
+
+
+    }
+
+    function showBucket() {
+        $("#bucket")[0].innerHTML = '<table border=0><tr><td><img src="img/bottle.png" height="35"></td><td><div id="bucket_amount"></div></td></tr></table>';
+
+        $('#bucket_amount').dxNumberBox({
+            value: 5.0,
+            width: 130,
+            showSpinButtons: true,
+            onValueChanged: function(e) {
+                refreshData();
+            }
+        });
+
+    }
+
+    function showButtons() {
+        $("#calcButton").dxButton({
+            text: "Calculate",
+            onClick: function(e) {
+                refreshData();
+            }
+        });
+
+      
+        
+    }
+
+    function showSource() {
+        $("#sourceSelectBox").dxSelectBox({
+            //  placeholder: "Stage",
+            dataSource: sources_dataSource,
+            valueExpr: "id",
+            displayExpr: "name",
+            searchEnabled: true,
+            onSelectionChanged: function(option) {
+                try {
+                    source = option.selectedItem;
+                    pupolateStages();
+                } catch (e) {
+                    console.log(e.message);
+                }
+            }
+        });
+    }
+
+    function showStage() {
+        $("#stageSelectBox").dxSelectBox({
+            //  placeholder: "Stage",
+            dataSource: stages_dataSource,
+            valueExpr: "id",
+            displayExpr: "name",
+            searchEnabled: true,
+            onSelectionChanged: function(option) {
+                try {
+                    stage = option.selectedItem;
+                    refreshData();
+                } catch (e) {
+                    console.log(e.message);
+                }
+            }
+        });
+    }
+
+    var busy = false;
+    var needsRefresh = false;
+    var needsOutput = true;
+    function refreshData() {
+        
+        if(!needsRefresh)
+            if (!busy) {
+           
+                busy = true;
+                  setInitialValues();
+            calculateNutrients();
+            calculate();
+            busy = false;
+
+         
+           while (needsRefresh) {
+               calculateNutrients();
+               calculate();
+               
+            }
+
+
+        }
+    }
+
+    function showOutput() {
+        $("#output").dxTextArea({
+            value: "",
+            height: 600,
+            width: 200,
+
+
+        });
+    }
+
+    var stage = 'none';
+    source = 'none';
+
+    function setInitialValues() {
+        $('#mid_bucket_amount').dxNumberBox('instance').option("value", $('#bucket_amount').dxNumberBox('instance').option("value"));
+        //$('#bucket_amount').dxNumberBox('instance').option("value", 5);
+        var products = stage.products;
+        products.forEach(function (product) {
+            try {
+                if (typeof (product) !== 'undefined' && typeof (product.id) !== 'undefined') {
+                    $('#' + product.id + '_amount').dxNumberBox('instance').option("value", 0);
+
+                }
+            } catch (e) {
+                //alert(e.message)
+            }
+
+        });
+
+    }
+    function calculateNutrients() {
+        var products = stage.products;
+        var midBucketSize = $('#mid_bucket_amount').dxNumberBox('instance').option("value");
+        var bucketSize = $('#bucket_amount').dxNumberBox('instance').option("value");
+        products.forEach(function(product) {
+            try {
+
+                if (typeof (product) !== 'undefined' && typeof (product.id) !== 'undefined') {
+                    var productAmount = 1.0 * product.amount * bucketSize;
+
+
+                    var midProductAmount = 1.0 * product.amount * midBucketSize;
+
+                    var ignoreCalimagic = $("#ignoreCalimagic").dxCheckBox('instance').option('value');
+
+                    if (product.id == 'rapidstart' || (product.id == 'calimagic' && ignoreCalimagic)) {
+                        $('#' + product.id + '_amount').dxNumberBox('instance').option("value", 0);
+                    } else {
+                    if (product.id == "calimagic" || product.id == "armorsi") {
+                            $('#' + product.id + '_amount').dxNumberBox('instance').option("value", productAmount.toFixed(2));
+                        } else {
+                            try {
+                                $('#' + product.id + '_amount').dxNumberBox('instance').option("value", midProductAmount.toFixed(2));
+                            } catch (z) {
+                              //  alert(z.message);
+                            }
+                        }
+                    } 
+                }
+            } catch (e) {
+                // alert(e.message)
+            }
+
+        });
+    }
+
+    var sources = [
+        { id: "coco", name: "Coco" },
+        { id: "ghe_d2w_simple", name: "GHE - Drain to Waste - Simple" },
+        { id: "ghe_d2w_expert", name: "GHE - Drain to Waste - Expert" },
+        { id: "ghe_recirc_simple", name: "GHE - Recirculating - Simple" },
+        { id: "ghe_recirc_expert", name: "GHE - Recirculating - Expert" },
+    ];
+    stages_dataSource = new DevExpress.data.DataSource({
+        store: selectedStages,
+        type: 'array',
+        key: "id",
+
+    });
+
+    var sources_dataSource = new DevExpress.data.DataSource({
+        store: sources,
+        type: 'array',
+        key: "id",
+
+    });
+
+    function pupolateStages() {
+
+
+        selectedStages = stages.filter(obj => {
+            return obj.source === source.id;
+        });
+        stages_dataSource = new DevExpress.data.DataSource({
+            store: selectedStages,
+            type: 'array',
+            key: "id",
+
+        });
+
+        $("#stageSelectBox").dxSelectBox('instance').option('dataSource', stages_dataSource);
+
+    }
+
+
+    function getProductsForStage(stage) {
+        for (var i in stages) {
+            var searchStage = stages[i];
+            if (searchStage.id == stage)
+                return searchStage.products;
+        }
+
+        return null;
+    }
+
+    function calculate() {
+        if (true) {    try {
+
+           
+                var bucketSize = parseFloat($('#bucket_amount').dxNumberBox('instance').option("value"));
+                var midBucketSize = parseFloat($('#mid_bucket_amount').dxNumberBox('instance').option("value"));
+                //var bucket = new Gallons(bucketSize);
+                var bucket = new Solution("bucket", "Bucket");
+                bucket.setAmount(1000.0 * litresInGallon * (bucketSize));
+                bucket.ppm = 20.0;
+                bucket.EC = 10;
+                bucket.ph = 8.0;
+
+                var midBucket = new Solution("mid_bucket", "Mid Bucket");
+                midBucket.setAmount(1000.0 * litresInGallon * midBucketSize);
+                midBucket.ppm = 20.0;
+                midBucket.EC = 10;
+                midBucket.ph = 8.0;
+
+                box.forEach(function(product) {
+                    var solutionAmount = parseFloat($('#' + product.code + '_amount').dxNumberBox('instance').option("value"));
+                    if (solutionAmount != 0) {
+                        var addingAmount = solutionAmount;
+                        if (product.code == 'grow') bucket.addSolution(new FloraGrow(addingAmount));
+                        if (product.code == 'micro') bucket.addSolution(new FloraMicro(addingAmount));
+                        if (product.code == 'bloom') bucket.addSolution(new FloraBloom(addingAmount));
+                      //  if (product.code == 'rapidstart') bucket.addSolution(new RapidStart(addingAmount));
+                        if (product.code == 'camg') bucket.addSolution(new CalciumMagnesium(addingAmount));
+                        if (product.code == 'armorsi') bucket.addSolution(new ArmorSi(addingAmount));
+
+                        if (product.code == 'koolbloom') bucket.addSolution(new KoolBloom(addingAmount));
+                        if (product.code == 'floraliciousplus') bucket.addSolution(new FloraliciousPlus(addingAmount));
+                        if (product.code == 'diamondnectar') bucket.addSolution(new DiamondNectar(addingAmount));
+                        if (product.code == 'floranectar') bucket.addSolution(new FloraNectar(addingAmount));
+                        if (product.code == 'florablend') bucket.addSolution(new FloraBlend(addingAmount));
+
+                        if (product.code == 'phup') bucket.addSolution(new PhUp(addingAmount));
+                        if (product.code == 'phdown') bucket.addSolution(new PhDown(addingAmount));
+                        if (product.code == 'calimagic') bucket.addSolution(new Calimagic(addingAmount));
+                   
+
+                    }
+
+                });
+
+                //needsOutput = true;
+                var targetPPM = 0;
+
+                var modePPM = $("#targetPPM").dxRadioGroup('instance').option('value');
+
+                if (typeof(stage.ppmTargetMax) !== 'undefined') {
+                    var ppmTargetMid = ((stage.ppmTargetMax + stage.ppmTarget) / 2).toFixed(0) ;
+
+                    if (modePPM == 'Min')
+                        targetPPM = stage.ppmTarget;
+                    if (modePPM == 'Mid')
+                    targetPPM = ppmTargetMid;
+                    if (modePPM == 'Max')
+                        targetPPM = stage.ppmTargetMax;
+
+                } else {
+                    targetPPM = stage.ppmTarget;
+                }
+            if (parseInt(targetPPM) < parseInt(bucket.getPPM()) || parseInt(targetPPM) * 0.96 > parseInt(bucket.getPPM())) {
+
+
+                    var desiredMid = 0.96 * midBucketSize * parseInt(targetPPM) / bucket.getPPM();
+
+                    $('#mid_bucket_amount').dxNumberBox('instance').option("value", desiredMid);
+
+                    needsRefresh = true;
+                    needsOutput = false;
+                } else {
+                    needsRefresh = false;
+                    needsOutput = true;
+            }
+
+                if(needsOutput) {
+                var contents = "";
+
+                    contents += SEPARATOR();
+                    if (typeof (stage.phLow) !== 'undefined')
+                        contents += "pH range: " + stage.phLow + "-" + stage.phHigh + "\n";
+                    else
+                        contents += "pH range: " + 5.5 + "-" + 6.5 + "\n";
+                    contents += "Target PPM: " + stage.ppmTarget;
+
+
+                    if (typeof (stage.ppmTargetMax) !== 'undefined')
+                        contents += "-" + stage.ppmTargetMax + "\n";
+                    else contents += "\n";
+
+                    contents += "Target EC: " + stage.ECTarget;
+                    if (typeof (stage.ECTargetMax) !== 'undefined')
+                        contents += "-" + stage.ECTargetMax + "\n";
+                    else contents += "\n";
+                    contents += SEPARATOR();
+
+                    contents += bucket.getNER();
+
+                    contents += SEPARATOR();
+
+                    contents += "Actual PH: " + bucket.getPH().toFixed(2) + "\n";
+                    contents += "Actual EC: " + (bucket.getEC() / 1000).toFixed(1) + "\n";
+                    contents += "Actual PPM: " + bucket.getPPM().toFixed(0) + "\n";
+
+
+                    contents += SEPARATOR();
+                    contents += "Solution added: " + (bucket.getAddedSolutionAmount()).toFixed(2) + " ml" + "\n";
+                    contents += "Nutrients: " + bucket.getTotalNutrients().toFixed(2) + " mg" + "\n";
+                    contents += "Water: " + (bucket.getTotalWater() / 1000).toFixed(2) + " Litres" + "\n";
+                    contents += "Total: " + (bucket.getTotal() / 1000).toFixed(2) + " Litres" + "\n";
+                    contents += SEPARATOR();
+                    contents += "Ingredients: \n" + bucket.contents() + "\n";
+
+
+                    $("#output").dxTextArea('instance').option("value", contents);
+                   // needsOutput = true;
+                }
+            } catch
+            (e)
+            {
+                console.log(e.message);
+            }
+        }
+    }
+
+    function SEPARATOR() {
+        //return "----------------------------------------\n";
+        return "--------------------\n";
+    }
+
+    function initUI() {
+        try {
+            buyBox();
+        } catch (e) {
+            alert(e.message);
+        }
+
+        try {
+            showSource();
+        } catch (e) {
+            alert(e.message);
+        }
+
+
+        try {
+            showStage();
+        } catch (e) {
+            alert(e.message);
+        }
+
+        try {
+            showBox();
+        } catch (e) {
+            alert(e.message);
+        }
+        try {
+
+            // showBucket();
+        } catch (e) {
+            alert(e.message);
+        }
+        try {
+            // showButtons();
+        } catch (e) {
+            alert(e.message);
+        }
+        try {
+            showOutput();
+        } catch (e) {
+            alert(e.message);
+        }
+
+    }
+
+
+</script>
+
+
+</head>
+
+
+<body onload="initUI();">
+
+<table border="0" cellpadding=0 valign="top">
+
+    <tr valign="top">
+        <td valign="top">
+
+            <!-- <div id="bucket"></div><br />-->
+            <div id="box"></div>
+        </td>
+
+        <td valign="top">
+            <table border="0">
+                <tr>
+                    <td>
+                        <div id="sourceSelectBox"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div id="stageSelectBox"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div id="ignoreCalimagic"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div id="targetPPM"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div id="output"></div>
+                    </td>
+                </tr>
+            </table>
+            <!-- <div id="calcButton"></div><br />-->
+
+        </td>
+    </tr>
+</table>
+
+<!--    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script> -->
+
+
+</body>
+</html>
